@@ -61,6 +61,15 @@ for _, accent in ipairs(M.accents) do
   accent_set[accent] = true
 end
 
+-- The theme a window starts on before it has made a selection of its own.
+local DEFAULT_FLAVOR = 'fall'
+local DEFAULT_ACCENT = 'green'
+
+--- Fill in the default theme for halves a window hasn't chosen yet.
+local function with_defaults(flavor, accent)
+  return flavor or DEFAULT_FLAVOR, accent or DEFAULT_ACCENT
+end
+
 local function validate(flavor, accent)
   if not palettes.flavors[flavor] then
     error(
@@ -162,6 +171,14 @@ local function frame_colors(flavor, accent)
   }
 end
 
+--- Copy src's entries over dst and return dst.
+local function overlay(dst, src)
+  for k, v in pairs(src) do
+    dst[k] = v
+  end
+  return dst
+end
+
 ----------------------------------------------------------------------------
 -- Runtime state
 ----------------------------------------------------------------------------
@@ -231,13 +248,7 @@ local function apply(window, flavor, accent)
 
   -- A window_frame override replaces the whole table, so re-apply the user's
   -- own window_frame options (font, font_size, ...) alongside our colors.
-  local frame = {}
-  for k, v in pairs(plugin_opts.frame) do
-    frame[k] = v
-  end
-  for k, v in pairs(frame_colors(flavor, accent)) do
-    frame[k] = v
-  end
+  local frame = overlay(overlay({}, plugin_opts.frame), frame_colors(flavor, accent))
 
   local ok, err = pcall(function()
     window:set_config_overrides {
@@ -314,9 +325,7 @@ M.action = {}
 
 function M.action.rotate(kind, delta)
   return wezterm.action_callback(function(window)
-    local flavor, accent = current(window)
-    flavor = flavor or 'fall'
-    accent = accent or 'green'
+    local flavor, accent = with_defaults(current(window))
     local next_flavor, next_accent = M.next(flavor, accent, kind, delta)
     apply(window, next_flavor, next_accent)
   end)
@@ -344,9 +353,7 @@ local function pick(kind)
       if not id then
         return
       end
-      local flavor, accent = current(window)
-      flavor = flavor or 'fall'
-      accent = accent or 'green'
+      local flavor, accent = with_defaults(current(window))
       if kind == 'accent' then
         accent = id
       else
@@ -374,9 +381,7 @@ function M.command_palette_entries()
       doc = 'Display the current flavor and accent',
       icon = 'md_magnify',
       action = wezterm.action_callback(function(window, pane)
-        local flavor, accent = current(window)
-        flavor = flavor or 'fall'
-        accent = accent or 'green'
+        local flavor, accent = with_defaults(current(window))
         window:perform_action(
           wezterm.action.PromptInputLine {
             description = ('Evergarden: %s'):format(theme_label(flavor, accent)),
@@ -455,8 +460,7 @@ end
 -- @param window? omit to report the configured default
 -- @return flavor, accent
 function M.current_theme(window)
-  local flavor, accent = current(window)
-  return flavor or 'fall', accent or 'green'
+  return with_defaults(current(window))
 end
 
 --- Register every evergarden scheme and select one.
@@ -469,18 +473,14 @@ end
 --   `notifications` defaults to false; set it to true for a toast on switch.
 function M.apply_to_config(config, opts)
   opts = opts or {}
-  local flavor = opts.flavor or 'fall'
-  local accent = opts.accent or 'green'
+  local flavor, accent = with_defaults(opts.flavor, opts.accent)
   validate(flavor, accent)
 
   plugin_opts.notifications = opts.notifications == true
 
   -- Remember the user's non-color window_frame options (font, font_size, ...)
   -- so that rotations, which replace the whole table, don't drop them.
-  plugin_opts.frame = {}
-  for k, v in pairs(config.window_frame or {}) do
-    plugin_opts.frame[k] = v
-  end
+  plugin_opts.frame = overlay({}, config.window_frame or {})
 
   config.color_schemes = config.color_schemes or {}
   for _, f in ipairs(M.flavors) do
@@ -490,9 +490,7 @@ function M.apply_to_config(config, opts)
   end
 
   config.window_frame = config.window_frame or {}
-  for k, v in pairs(frame_colors(flavor, accent)) do
-    config.window_frame[k] = v
-  end
+  overlay(config.window_frame, frame_colors(flavor, accent))
 
   config.color_scheme = scheme_name(flavor, accent)
   default_scheme = config.color_scheme
