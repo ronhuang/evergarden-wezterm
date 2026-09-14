@@ -183,21 +183,20 @@ end
 --
 -- A rotation applied earlier in this window is recorded in the window's config
 -- overrides; otherwise the window is still on the scheme chosen in wezterm.lua,
--- which is visible through its effective config. Without a window, this reports
--- the configured default.
+-- which is tracked in `default_scheme`. Without a window, this reports the
+-- configured default.
+--
+-- Deliberately avoids `window:effective_config()`: that resolves the overrides
+-- by re-evaluating the config file, which makes it far too expensive to call on
+-- every rotation, and it cannot be used from an `augment-command-palette`
+-- handler at all.
 local function current(window)
   if window then
-    local overrides = window:get_config_overrides() or {}
-    local flavor, accent = parse_scheme(overrides.color_scheme)
-    if flavor then
-      return flavor, accent
-    end
-
-    local ok, effective = pcall(function()
-      return window:effective_config()
+    local ok, overrides = pcall(function()
+      return window:get_config_overrides()
     end)
-    if ok and type(effective) == 'table' then
-      flavor, accent = parse_scheme(effective.color_scheme)
+    if ok and type(overrides) == 'table' then
+      local flavor, accent = parse_scheme(overrides.color_scheme)
       if flavor then
         return flavor, accent
       end
@@ -355,23 +354,32 @@ end
 
 --- Entries added to the Command Palette (Ctrl+Shift+P).
 --
--- `window` is optional; without it the entries report the scheme chosen in
--- wezterm.lua rather than the window's current one.
-function M.command_palette_entries(window)
-  local flavor, accent = current(window)
-  flavor = flavor or 'fall'
-  accent = accent or 'green'
-  local scheme = scheme_name(flavor, accent)
-
+-- This runs inside the augment-command-palette hook, which is invoked with the
+-- Lua config borrowed and which discards the whole list if the handler raises,
+-- so it must not call any window methods. The entry below works out the current
+-- theme when it is activated instead.
+function M.command_palette_entries()
   return {
     {
-      -- Doubles as "tell me what I'm looking at": the palette is rebuilt every
-      -- time it opens, so this entry always names the current theme.
-      brief = ('Evergarden: current theme is %s'):format(theme_label(flavor, accent)),
-      doc = ('Copy %s to the clipboard'):format(scheme),
-      icon = 'md_content_copy',
+      brief = 'Evergarden: show current theme',
+      doc = 'Display the current flavor and accent',
+      icon = 'md_magnify',
       action = wezterm.action_callback(function(window, pane)
-        window:perform_action(wezterm.action.CopyTo(scheme), pane)
+        local flavor, accent = current(window)
+        flavor = flavor or 'fall'
+        accent = accent or 'green'
+        window:perform_action(
+          wezterm.action.PromptInputLine {
+            description = ('Evergarden: %s'):format(theme_label(flavor, accent)),
+            initial_value = scheme_name(flavor, accent),
+            action = wezterm.action_callback(function(win, _, line)
+              if line then
+                win:perform_action(wezterm.action.CopyTo(line), pane)
+              end
+            end),
+          },
+          pane
+        )
       end),
     },
     {
@@ -480,8 +488,8 @@ function M.apply_to_config(config, opts)
   config.color_scheme = scheme_name(flavor, accent)
   default_scheme = config.color_scheme
 
-  wezterm.on('augment-command-palette', function(window, pane)
-    return M.command_palette_entries(window)
+  wezterm.on('augment-command-palette', function()
+    return M.command_palette_entries()
   end)
 end
 

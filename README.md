@@ -48,7 +48,7 @@ Open the Command Palette (`Ctrl+Shift+P` on Windows/Linux) and type
 
 | Command | Effect |
 | --- | --- |
-| Evergarden: current theme is … | Names the current theme; copies its scheme name to the clipboard |
+| Evergarden: show current theme | Displays the current flavor and accent, and its scheme name |
 | Evergarden: next theme | Next of all 48 combinations |
 | Evergarden: previous theme | Previous combination |
 | Evergarden: next accent | Next accent, same flavor |
@@ -59,10 +59,11 @@ Open the Command Palette (`Ctrl+Shift+P` on Windows/Linux) and type
 | Evergarden: select flavor | Pick from the 4 flavors |
 | Evergarden: select accent | Pick from the 12 accents |
 
-The first entry is how you read back what you're looking at: the palette is
-rebuilt each time it opens, so it always names the current flavor and accent,
-and activating it copies e.g. `evergarden-fall-green` to the clipboard for
-pasting into `apply_to_config`.
+The first entry is how you read back what you're looking at. It opens a prompt
+showing the current flavor and accent and the scheme name
+(e.g. `evergarden-fall-green`); press Enter to copy the scheme name to the
+clipboard for pasting into `apply_to_config`. Reading the theme on demand like
+this is the alternative to the per-switch toast, which is off by default.
 
 > **Rotation is per-window.** WezTerm has no runtime API for changing colors
 > globally, so switching applies to the window you're in and lasts until that
