@@ -100,8 +100,17 @@ end
 --   * the accent only drives the cursor and the active tab.
 function M.scheme(flavor, accent)
   validate(flavor, accent)
-  local c = palettes.flavors[flavor].colors
+  local entry = palettes.flavors[flavor]
+  local c = entry.colors
   local a = c[accent]
+
+  -- The upstream ports put `base`/`surface0` in the ANSI black slots, which
+  -- leaves tools that print dimmed text (notably `jj log`, which draws the tail
+  -- of the change and commit ids with ANSI 8) at roughly 1:1 against the
+  -- background. Use the palette's muted-foreground ramp instead, in the
+  -- direction that moves away from the background for light flavors.
+  local bright_black = entry.dark and c.overlay1 or c.overlay2
+
   return {
     foreground = c.text,
     background = c.base,
@@ -120,7 +129,7 @@ function M.scheme(flavor, accent)
 
     -- black, red, green, yellow, blue, magenta, cyan, white
     ansi = { c.base, c.red, c.green, c.yellow, c.blue, c.pink, c.aqua, c.text },
-    brights = { c.surface0, c.red, c.green, c.yellow, c.blue, c.pink, c.aqua, c.subtext0 },
+    brights = { bright_black, c.red, c.green, c.yellow, c.blue, c.pink, c.aqua, c.subtext0 },
 
     tab_bar = {
       background = c.mantle,

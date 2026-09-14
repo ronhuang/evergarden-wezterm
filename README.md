@@ -154,7 +154,7 @@ and Alacritty ports, so a flavor looks the same across terminals:
 | `selection_fg` / `selection_bg` | `text` / `surface1` |
 | `scrollbar_thumb` / `split` | `surface2` / `overlay1` |
 | `ansi` | `base, red, green, yellow, blue, pink, aqua, text` |
-| `brights` | `surface0, red, green, yellow, blue, pink, aqua, subtext0` |
+| `brights` | readable muted tone, `red, green, yellow, blue, pink, aqua, subtext0` |
 | `tab_bar` | `mantle` background, active tab uses the accent |
 | `window_frame` | `mantle`/`crust` titlebar, accent underline |
 
@@ -162,6 +162,13 @@ As in the other terminal ports, **the accent does not change the ANSI palette** 
 it only drives the cursor and the active tab. That's what makes switching
 accent a cheap, safe operation that never breaks color-dependent terminal
 output.
+
+One deliberate departure from the other terminal ports: bright black (ANSI 8)
+is `overlay1` on dark flavors and `overlay2` on light ones, instead of the
+`surface0` they use. `surface0` sits at roughly 1:1 against the background,
+which makes dimmed output unreadable — `jj log` draws the tail of the change
+and commit ids with ANSI 8, for example. ANSI 0 is left as `base` to match
+upstream, so programs that print black text are still hard to read.
 
 There is deliberately no transparency/opacity support, matching the Ghostty
 port.
