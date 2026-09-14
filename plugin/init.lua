@@ -20,25 +20,44 @@ local M = {}
 -- Palette data
 ----------------------------------------------------------------------------
 
--- Locate plugin/palettes.lua without hardcoding our own git url.
+-- Locate plugin/palettes.lua.
 --
 -- `debug` is not available in wezterm's Lua sandbox, so the directory of the
--- currently executing file cannot be recovered. `wezterm.plugin.list()` is the
--- documented way to find plugin directories; probing for our own generated
--- file (rather than keying off the url) keeps `file://` development checkouts
--- and forks working without edits.
+-- currently executing file cannot be recovered; `wezterm.plugin.list()` is the
+-- documented way to find plugin directories. Entries are probed in two passes:
+-- urls containing ours first, so a same-named palettes.lua in another plugin
+-- can't win, then every remaining entry, which keeps `file://` development
+-- checkouts and forks under a renamed url working without edits.
 local function load_palettes()
   local sep = package.config:sub(1, 1)
-  for _, entry in ipairs(wezterm.plugin.list()) do
+
+  local function try(entry)
     local path = entry.plugin_dir .. sep .. 'plugin' .. sep .. 'palettes.lua'
     local chunk = loadfile(path)
-    if chunk then
-      local ok, data = pcall(chunk)
-      if ok and type(data) == 'table' and type(data.flavors) == 'table' then
-        return data
+    if not chunk then
+      return nil
+    end
+    local ok, data = pcall(chunk)
+    if ok and type(data) == 'table' and type(data.flavors) == 'table' then
+      return data
+    end
+    return nil
+  end
+
+  local entries = wezterm.plugin.list()
+  for _, ours_only in ipairs { true, false } do
+    for _, entry in ipairs(entries) do
+      local ours = type(entry.url) == 'string'
+        and entry.url:find('evergarden/wezterm', 1, true) ~= nil
+      if ours == ours_only then
+        local data = try(entry)
+        if data then
+          return data
+        end
       end
     end
   end
+
   error(
     'evergarden: unable to find plugin/palettes.lua. '
       .. 'Try `wezterm.plugin.update_all()`, or remove the plugin directory and reload.'
