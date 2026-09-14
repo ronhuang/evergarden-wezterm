@@ -1,10 +1,10 @@
 _default:
   @just --list
 
-# Regenerate plugin/palettes.lua from the upstream evergarden palettes.
+# Regenerate plugin/palettes.lua from wezterm.tera.
 build:
-  node scripts/build-palettes.mjs
+  whiskers wezterm.tera
 
 # Fail if plugin/palettes.lua is out of date. Useful in CI.
 check:
-  node scripts/build-palettes.mjs --check
+  whiskers wezterm.tera --check plugin/palettes.lua

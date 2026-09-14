@@ -1,15 +1,15 @@
 --[[
 evergarden for WezTerm
 
-Registers all 5 evergarden flavors x 12 accents as WezTerm color schemes and
+Registers every evergarden flavor and accent as a WezTerm color scheme and
 adds Command Palette entries (and bindable actions) for switching between them
 at runtime.
 
     local eg = wezterm.plugin.require 'https://codeberg.org/evergarden/wezterm'
     eg.apply_to_config(config, { flavor = 'fall', accent = 'green' })
 
-The palette data lives in plugin/palettes.lua, which is generated from the
-evergarden nvim palettes by scripts/build-palettes.mjs.
+The palette data lives in plugin/palettes.lua, which is generated from
+wezterm.tera by Whiskers (see the justfile).
 ]]
 
 local wezterm = require 'wezterm'
@@ -47,7 +47,7 @@ end
 
 local palettes = load_palettes()
 
---- Flavor identifiers in cycle order: winter, fall, spring, summer, lunar.
+--- Flavor identifiers in cycle order: winter, fall, spring, summer.
 M.flavors = palettes.order
 
 --- Accent identifiers in cycle order.
@@ -74,6 +74,11 @@ local function validate(flavor, accent)
         :format(tostring(accent), table.concat(M.accents, ', '))
     )
   end
+end
+
+-- Human-readable name for a flavor/accent pair, e.g. "Fall · green".
+local function theme_label(flavor, accent)
+  return palettes.flavors[flavor].name .. ' \194\183 ' .. accent
 end
 
 ----------------------------------------------------------------------------
@@ -155,7 +160,8 @@ end
 local plugin_opts = {
   -- window_frame keys supplied by the user, preserved across rotations
   frame = {},
-  notifications = true,
+  -- switching is silent unless explicitly opted in
+  notifications = false,
 }
 
 -- The scheme selected in wezterm.lua, used as the starting point when a window
@@ -177,21 +183,24 @@ end
 --
 -- A rotation applied earlier in this window is recorded in the window's config
 -- overrides; otherwise the window is still on the scheme chosen in wezterm.lua,
--- which is visible through its effective config.
+-- which is visible through its effective config. Without a window, this reports
+-- the configured default.
 local function current(window)
-  local overrides = window:get_config_overrides() or {}
-  local flavor, accent = parse_scheme(overrides.color_scheme)
-  if flavor then
-    return flavor, accent
-  end
-
-  local ok, effective = pcall(function()
-    return window:effective_config()
-  end)
-  if ok and type(effective) == 'table' then
-    flavor, accent = parse_scheme(effective.color_scheme)
+  if window then
+    local overrides = window:get_config_overrides() or {}
+    local flavor, accent = parse_scheme(overrides.color_scheme)
     if flavor then
       return flavor, accent
+    end
+
+    local ok, effective = pcall(function()
+      return window:effective_config()
+    end)
+    if ok and type(effective) == 'table' then
+      flavor, accent = parse_scheme(effective.color_scheme)
+      if flavor then
+        return flavor, accent
+      end
     end
   end
 
@@ -209,12 +218,7 @@ local function apply(window, flavor, accent)
   -- Emit the toast first: set_config_overrides() re-evaluates the config file
   -- several times over, and anything queued after it waits for that work.
   if plugin_opts.notifications then
-    window:toast_notification(
-      'evergarden',
-      palettes.flavors[flavor].name .. ' \194\183 ' .. accent,
-      nil,
-      1500
-    )
+    window:toast_notification('evergarden', theme_label(flavor, accent), nil, 1500)
   end
 
   -- A window_frame override replaces the whole table, so re-apply the user's
@@ -263,7 +267,7 @@ end
 
 --- Work out the flavor/accent a rotation would move to.
 --
--- `kind` is one of `'theme'` (walk all 60 combinations), `'accent'`,
+-- `kind` is one of `'theme'` (walk every flavor/accent combination), `'accent'`,
 -- `'flavor'` or `'random'`. Both axes wrap around.
 --
 -- @return flavor, accent
@@ -295,7 +299,7 @@ end
 --
 --   eg.action.rotate('accent', 1)   -- next accent
 --   eg.action.rotate('flavor', -1)  -- previous flavor
---   eg.action.rotate('theme', 1)    -- next of all 60 combinations
+--   eg.action.rotate('theme', 1)    -- next of every combination
 --   eg.action.rotate('random')      -- random combination
 --   eg.action.set('summer', 'blue') -- a specific combination
 M.action = {}
@@ -350,8 +354,26 @@ end
 ----------------------------------------------------------------------------
 
 --- Entries added to the Command Palette (Ctrl+Shift+P).
-function M.command_palette_entries()
+--
+-- `window` is optional; without it the entries report the scheme chosen in
+-- wezterm.lua rather than the window's current one.
+function M.command_palette_entries(window)
+  local flavor, accent = current(window)
+  flavor = flavor or 'fall'
+  accent = accent or 'green'
+  local scheme = scheme_name(flavor, accent)
+
   return {
+    {
+      -- Doubles as "tell me what I'm looking at": the palette is rebuilt every
+      -- time it opens, so this entry always names the current theme.
+      brief = ('Evergarden: current theme is %s'):format(theme_label(flavor, accent)),
+      doc = ('Copy %s to the clipboard'):format(scheme),
+      icon = 'md_content_copy',
+      action = wezterm.action_callback(function(window, pane)
+        window:perform_action(wezterm.action.CopyTo(scheme), pane)
+      end),
+    },
     {
       brief = 'Evergarden: next theme',
       doc = 'Cycle to the next flavor/accent combination',
@@ -391,7 +413,7 @@ function M.command_palette_entries()
     },
     {
       brief = 'Evergarden: select flavor',
-      doc = 'Pick one of winter, fall, spring, summer or lunar',
+      doc = 'Pick one of winter, fall, spring or summer',
       icon = 'md_format_list_bulleted',
       action = pick 'flavor',
     },
@@ -408,6 +430,18 @@ end
 -- Public API
 ----------------------------------------------------------------------------
 
+--- Where a window currently is, as a flavor/accent pair.
+--
+-- A window that has been switched with the commands below reports its own
+-- selection; otherwise this is the pair chosen in wezterm.lua.
+--
+-- @param window? omit to report the configured default
+-- @return flavor, accent
+function M.current_theme(window)
+  local flavor, accent = current(window)
+  return flavor or 'fall', accent or 'green'
+end
+
 --- Register every evergarden scheme and select one.
 --
 -- Call this *after* setting any `window_frame` options of your own: the plugin
@@ -415,13 +449,14 @@ end
 --
 -- @param config wezterm config builder
 -- @param opts? { flavor?: string, accent?: string, notifications?: boolean }
+--   `notifications` defaults to false; set it to true for a toast on switch.
 function M.apply_to_config(config, opts)
   opts = opts or {}
   local flavor = opts.flavor or 'fall'
   local accent = opts.accent or 'green'
   validate(flavor, accent)
 
-  plugin_opts.notifications = opts.notifications ~= false
+  plugin_opts.notifications = opts.notifications == true
 
   -- Remember the user's non-color window_frame options (font, font_size, ...)
   -- so that rotations, which replace the whole table, don't drop them.
@@ -445,8 +480,8 @@ function M.apply_to_config(config, opts)
   config.color_scheme = scheme_name(flavor, accent)
   default_scheme = config.color_scheme
 
-  wezterm.on('augment-command-palette', function()
-    return M.command_palette_entries()
+  wezterm.on('augment-command-palette', function(window, pane)
+    return M.command_palette_entries(window)
   end)
 end
 
