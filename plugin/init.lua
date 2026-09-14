@@ -206,6 +206,17 @@ end
 local function apply(window, flavor, accent)
   validate(flavor, accent)
 
+  -- Emit the toast first: set_config_overrides() re-evaluates the config file
+  -- several times over, and anything queued after it waits for that work.
+  if plugin_opts.notifications then
+    window:toast_notification(
+      'evergarden',
+      palettes.flavors[flavor].name .. ' \194\183 ' .. accent,
+      nil,
+      1500
+    )
+  end
+
   -- A window_frame override replaces the whole table, so re-apply the user's
   -- own window_frame options (font, font_size, ...) alongside our colors.
   local frame = {}
@@ -229,15 +240,6 @@ local function apply(window, flavor, accent)
     window:set_config_overrides {
       color_scheme = scheme_name(flavor, accent),
     }
-  end
-
-  if plugin_opts.notifications then
-    window:toast_notification(
-      'evergarden',
-      palettes.flavors[flavor].name .. ' \194\183 ' .. accent,
-      nil,
-      1500
-    )
   end
 end
 
