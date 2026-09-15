@@ -27,7 +27,9 @@ local M = {}
 -- documented way to find plugin directories. Entries are probed in two passes:
 -- urls containing ours first, so a same-named palettes.lua in another plugin
 -- can't win, then every remaining entry, which keeps `file://` development
--- checkouts and forks under a renamed url working without edits.
+-- checkouts and forks working without edits. The pattern matches both the
+-- upstream layout (evergarden/wezterm) and dash-named forks
+-- (evergarden-wezterm).
 local function load_palettes()
   local sep = package.config:sub(1, 1)
 
@@ -48,7 +50,7 @@ local function load_palettes()
   for _, ours_only in ipairs { true, false } do
     for _, entry in ipairs(entries) do
       local ours = type(entry.url) == 'string'
-        and entry.url:find('evergarden/wezterm', 1, true) ~= nil
+        and entry.url:find('evergarden[-/]wezterm', 1, true) ~= nil
       if ours == ours_only then
         local data = try(entry)
         if data then
